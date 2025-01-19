@@ -2,6 +2,7 @@ import { glob } from 'astro/loaders';
 import { experimental_AstroContainer } from 'astro/container';
 import { defineCollection, z } from 'astro:content';
 import type { Loader } from 'astro/loaders';
+import type { AstroComponentFactory } from 'astro/runtime/server/index.js';
 const blog = defineCollection({
 	// Load Markdown and MDX files in the `src/content/blog/` directory.
 	loader: glob({ base: './src/content/blog', pattern: '**/*.{md,mdx}' }),
@@ -25,12 +26,17 @@ const AstroFileLoader = async ({ base, pattern }: Record<string, string>): Promi
 			const fromGlob = import.meta.glob('./content/astro/*.astro');
 			
 			for (const [id, entry] of Object.entries(fromGlob)) {
-				// @ts-ignore
-				const { default: Post } = await entry();
-				const renderedEl = await container.renderToString(Post)
+				
+				const mod = await entry() as {
+					default: AstroComponentFactory,
+					metadata?: Record<string, unknown>
+				};
+
+				const renderedEl = await container.renderToString(mod.default)
+				
 				context.store.set({
 					id,
-					data: { id },
+					data: mod.metadata ?? {},
 					rendered: {
 						html: renderedEl
 					}
