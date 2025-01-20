@@ -17,30 +17,38 @@ const blog = defineCollection({
 	}),
 });
 
-const AstroFileLoader = async ({ base, pattern }: Record<string, string>): Promise<Loader> => {
+interface Module {
+	default: AstroComponentFactory,
+	metadata?: Record<string, unknown>
+}
+
+type GlobResult = Record<string, () => Promise<Module>>
+
+const AstroFileLoader = async (globResult: GlobResult): Promise<Loader> => {
 	const container = await experimental_AstroContainer.create()
 	return {
 		name: 'astro-file-loader',
-		load: async (context) => {
-
-			const fromGlob = import.meta.glob('./content/astro/*.astro');
-			
-			for (const [id, entry] of Object.entries(fromGlob)) {
+		load: async ({ store, generateDigest }) => {
+			for (const [id, entry] of Object.entries(globResult)) {
 				
-				const mod = await entry() as {
-					default: AstroComponentFactory,
-					metadata?: Record<string, unknown>
-				};
+				const mod = await entry();
 
 				const renderedEl = await container.renderToString(mod.default)
-				
-				context.store.set({
+				const digest = generateDigest({
+					id,
+					data: mod.metadata ?? {},
+					rendered: {
+						html: renderedEl,
+					},
+				})
+
+				store.set({
 					id,
 					data: mod.metadata ?? {},
 					rendered: {
 						html: renderedEl
-					}
-					// body: (await entry()) as string
+					},
+					digest
 				})
 			}
 		},
@@ -48,7 +56,7 @@ const AstroFileLoader = async ({ base, pattern }: Record<string, string>): Promi
 }
 
 const astro = defineCollection({
-	loader: await AstroFileLoader({ base: './content/astro', pattern: '*.astro' }),
+	loader: await AstroFileLoader(import.meta.glob('./components/*.astro') as unknown as GlobResult),
 })
 
 export const collections = { blog, astro };
